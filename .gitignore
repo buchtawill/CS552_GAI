@@ -1,0 +1,5 @@
+*.pkl
+*.pt
+*__pycache__*
+in_class_exercise/data
+*.npy

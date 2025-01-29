@@ -85,7 +85,7 @@ def create_tensor_dataset(data):
     unique = np.unique(X, axis=0)
     
     print(unique.shape)
-    return torch.tensor(unique)
+    return torch.tensor(unique, dtype=torch.float32)
 
 def prob1b():
     tensors = torch.load('./cpt_tensors.pt')
@@ -102,39 +102,50 @@ def prob1b():
     batch_size = 1
 
     # Train the model
+    # Loss should be roughly 0.03 after training
     num_epochs = 50
     for epoch in range(num_epochs):
+        epoch_loss = 0.0  # Track the total loss for the epoch
+
         for batch in dataloader:
-            targets = batch
-            
-            optimizer.zero_grad()
-            
+            batch = batch[0]  # Extract the tensor from the batch
+            batch_size = batch.size(0)
+
+            # Reshape the batch to have the correct dimensions
+            # Shape: [batch_size, sequence_length, 1]
+            inputs = batch.unsqueeze(-1).float()  # Shape: (batch_size, 25, 1)
+
             # Initialize hidden state
-            hidden = model.init_hidden(batch_size=batch_size)
-            loss = 0.0  # Track loss for the sequence
-            
-            # Loop through the sequence timestep by timestep
+            hidden = model.init_hidden(batch_size)
+
+            # Start training
+            optimizer.zero_grad()
+            loss = 0.0
+
             for t in range(sequence_length):
-                print(f"t = {t}")
-                # Input at timestep t (shape: [batch_size, 1, input_dim])
                 if t == 0:
                     input_t = torch.zeros((batch_size, 1, 1))  # First input is 0.0
                 else:
-                    input_t = targets[:, t-1].unsqueeze(-1).unsqueeze(-1)  # Input is xi-1
-                
-                # Target at timestep t
-                target_t = targets[:, t].unsqueeze(-1).unsqueeze(-1)  # Shape: [batch_size, 1, 1]
-                
+                    input_t = inputs[:, t - 1].unsqueeze(1)  # Use previous output as input
+
+                # Ground-truth target for timestep t
+                target_t = inputs[:, t].unsqueeze(1)
+
                 # Forward pass for one timestep
-                output_t, hidden = model(input_t, hidden)  # Output and updated hidden state
-                
-                # Compute the loss for the timestep
-                loss += criterion(output_t.squeeze(), target_t.squeeze())  # Sum loss over timesteps
+                output_t, hidden = model(input_t, hidden)
+
+                # Compute loss for the timestep
+                loss += criterion(output_t.squeeze(), target_t.squeeze())
+
+            # Backpropagation and optimization
+            loss.backward()
+            optimizer.step()
+
+            # Accumulate loss
+            epoch_loss += loss.item()
+
+        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
             
-        # Backpropagation and optimization
-        loss.backward()
-        optimizer.step()
-        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {loss.item()}")
 
 if __name__ == '__main__':
     
