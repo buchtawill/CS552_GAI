@@ -66,6 +66,8 @@ def plot_100_images(images):
     plt.axis('off')  # Turn off axes
     plt.show()
     
+# def plot_1_image()
+    
 def prob_1a(data):
     # Get 100 samples
     images = []
@@ -87,65 +89,79 @@ def create_tensor_dataset(data):
     print(unique.shape)
     return torch.tensor(unique, dtype=torch.float32)
 
-def prob1b():
+def train_lstm():
     tensors = torch.load('./cpt_tensors.pt')
-    
-    dataset = TensorDataset(tensors)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
     
     # Initialize the model
     model = PixelLSTM(input_dim=1, hidden_dim=32, num_layers=2)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
-    sequence_length = 25
-    batch_size = 1
+    # Ensure tensors have the correct shape before padding
+    tensors = tensors.unsqueeze(-1)  # Shape becomes (26, 25, 1)
 
-    # Train the model
-    # Loss should be roughly 0.03 after training
-    num_epochs = 50
+    # Pad with a column of zeros at the beginning
+    padded_tensors = torch.cat([torch.zeros((26, 1, 1)), tensors], dim=1)  # Shape: (26, 26, 1)
+
+    # Create X (first 25 values) and Y (shifted 25 values)
+    x = padded_tensors[:, :-1, :]  # Shape: (26, 25, 1) YES
+    y = padded_tensors[:, 1:, :]   # Shape: (26, 25, 1) YES
+
+    dataset = TensorDataset(x, y)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+    
+    num_epochs = 400
+    epochs = [(i + 1) for i in range(num_epochs)]
+    losses = np.zeros(num_epochs)
+    # Training loop
     for epoch in range(num_epochs):
-        epoch_loss = 0.0  # Track the total loss for the epoch
-
-        for batch in dataloader:
-            batch = batch[0]  # Extract the tensor from the batch
-            batch_size = batch.size(0)
-
-            # Reshape the batch to have the correct dimensions
-            # Shape: [batch_size, sequence_length, 1]
-            inputs = batch.unsqueeze(-1).float()  # Shape: (batch_size, 25, 1)
-
-            # Initialize hidden state
+        for batch_x, batch_y in dataloader:
+            optimizer.zero_grad()
+            
+            batch_size = batch_x.size(0)
             hidden = model.init_hidden(batch_size)
 
-            # Start training
-            optimizer.zero_grad()
-            loss = 0.0
+            output, _ = model(batch_x, hidden)  # Output shape: (batch, 25, 1)
+            
+            loss = criterion(output, batch_y.float())  # Ensure matching shape
 
-            for t in range(sequence_length):
-                if t == 0:
-                    input_t = torch.zeros((batch_size, 1, 1))  # First input is 0.0
-                else:
-                    input_t = inputs[:, t - 1].unsqueeze(1)  # Use previous output as input
-
-                # Ground-truth target for timestep t
-                target_t = inputs[:, t].unsqueeze(1)
-
-                # Forward pass for one timestep
-                output_t, hidden = model(input_t, hidden)
-
-                # Compute loss for the timestep
-                loss += criterion(output_t.squeeze(), target_t.squeeze())
-
-            # Backpropagation and optimization
             loss.backward()
             optimizer.step()
 
-            # Accumulate loss
-            epoch_loss += loss.item()
+        print(f"Epoch {epoch+1:>4}/{num_epochs}, Loss: {loss.item():.6f}")
+        losses[epoch] = loss.item()
+    plt.plot(epochs, losses)
+    plt.show()
+    
+    torch.save(model.state_dict(), './LSTM_weights.pth')
 
-        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss:.4f}")
-            
+def inference_lstm(model, start_value=0.0, flat:bool=False):
+    
+    seq_length = 25
+    
+    model.eval()  # Set the model to evaluation mode
+    with torch.no_grad():
+        generated_seq = [start_value]  # Start with the initial value
+        hidden = model.init_hidden(batch_size=1)  # Initialize hidden state
+
+        input_t = torch.tensor([[start_value]], dtype=torch.float32).unsqueeze(0)  # Shape: (1, 1, 1)
+
+        for _ in range(seq_length):
+            output, hidden = model(input_t, hidden)  # Forward pass
+
+            prob = torch.sigmoid(output).item()  # Convert logits to probability
+
+            next_value = 1 if prob >= 0.5 else 0  # Threshold at 0.5
+            generated_seq.append(next_value)
+
+            input_t = torch.tensor([[next_value]], dtype=torch.float32).unsqueeze(0)  # Update input
+
+    ret = np.array(generated_seq[1:])
+    if(flat):
+        return ret
+    
+    else:
+        return ret.reshape(5,5)
 
 if __name__ == '__main__':
     
@@ -157,5 +173,21 @@ if __name__ == '__main__':
     # Problem 1b
     # tensors = create_tensor_dataset(data)
     # torch.save(tensors, './cpt_tensors.pt')
-    prob1b()
     
+    # train_lstm()
+    
+    # Problem 1b
+    # model = PixelLSTM(input_dim=1, hidden_dim=32, num_layers=2)
+    # model.load_state_dict(torch.load('./LSTM_weights.pth'))
+    
+    # test = inference_lstm(model)
+    
+    # images = []
+    # for _ in range(100):
+    #     images.append(inference_lstm(model, start_value=np.random.rand()))
+        
+    # plot_100_images(images)
+    
+    # # Print the number of parameters in the model
+    # total_params = sum(p.numel() for p in model.parameters())
+    # print(f"Total number of parameters in the model: {total_params}")

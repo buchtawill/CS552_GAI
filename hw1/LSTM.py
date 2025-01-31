@@ -23,7 +23,7 @@ class PixelLSTM(nn.Module):
         output = self.fc(lstm_out)
         
         # Apply sigmoid to get output in range [0, 1]
-        output = torch.sigmoid(output)
+        # output = torch.sigmoid(output)
         return output, hidden
 
     def init_hidden(self, batch_size):
