@@ -44,7 +44,7 @@ def fit_ppca(face_data:np.ndarray, d_latent:int):
     n_samples = len(face_data)
     m_input_dim = len(face_data[0])
     W_weights = np.zeros((m_input_dim, d_latent))
-    mu = np.mean(faces, axis=0) # Shape: m_input_dim,
+    mu = np.mean(face_data, axis=0) # Shape: m_input_dim,
     
     # x(i): 1, 576
     # x(i).T: 576, 1
@@ -206,6 +206,9 @@ def problem_2c(faces, latent_d):
         z = x_to_z(random_faces[i], W, sigma2, mu)
         x_hat = z_to_x(z, W, sigma2, mu)
         reconstructed_faces[i, :] = x_hat
+        print(z.shape)
+        print(x_hat.shape) 
+        exit()
         
     plot_faces(reconstructed_faces)
     
@@ -271,7 +274,7 @@ if __name__ == '__main__':
     # plot_faces(faces[0:100], 25)
     # make_2d_scatter(faces) # problem 2b
     
-    # problem_2c(faces, latent_d = 32)
+    problem_2c(faces, latent_d = 32)
     # problem_2d(faces)
-    problem_2e(faces)
+    # problem_2e(faces)
     
