@@ -7,3 +7,4 @@ in_class_exercise/data
 *.npy
 hw3/gan_training
 hw3/epochs
+*.cpt
