@@ -12,11 +12,17 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer
 import io
 
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 PAD_IDX = tokenizer.pad_token_id
 BOS_IDX = tokenizer.bos_token_id
 EOS_IDX = tokenizer.eos_token_id
+BATCH_SIZE = 128
 
 if 'train_data' not in globals().keys():
     def data_process(filepaths):
@@ -32,21 +38,14 @@ if 'train_data' not in globals().keys():
     global train_data
     train_data = data_process(("train.jw", "train.en"))
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-BATCH_SIZE = 128
-
-from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader
-
 def generate_batch(data_batch):
-  jw_batch, en_batch = [], []
-  for (jw_item, en_item) in data_batch:
-    jw_batch.append(torch.cat([torch.tensor([BOS_IDX]), jw_item, torch.tensor([EOS_IDX])], dim=0))
-    en_batch.append(torch.cat([torch.tensor([BOS_IDX]), en_item, torch.tensor([EOS_IDX])], dim=0))
-  jw_batch = pad_sequence(jw_batch, padding_value=PAD_IDX)
-  en_batch = pad_sequence(en_batch, padding_value=PAD_IDX)
-  return jw_batch, en_batch
+    jw_batch, en_batch = [], []
+    for (jw_item, en_item) in data_batch:
+        jw_batch.append(torch.cat([torch.tensor([BOS_IDX]), jw_item, torch.tensor([EOS_IDX])], dim=0))
+        en_batch.append(torch.cat([torch.tensor([BOS_IDX]), en_item, torch.tensor([EOS_IDX])], dim=0))
+    jw_batch = pad_sequence(jw_batch, padding_value=PAD_IDX)
+    en_batch = pad_sequence(en_batch, padding_value=PAD_IDX)
+    return jw_batch, en_batch
 
 train_iter = DataLoader(train_data, batch_size=BATCH_SIZE,
                         shuffle=True, collate_fn=generate_batch, num_workers=8)
@@ -61,15 +60,19 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term)  # Apply sine to even indices
         pe[:, 1::2] = torch.cos(position * div_term)  # Apply cosine to odd indices
 
+        # Dimensions represent 
         # Part (1a)
-        pe = pe.unsqueeze(1)  # TODO: check if the unsqueeze dimension is correct!
+        # pe = pe.unsqueeze(1)  # TODO: check if the unsqueeze dimension is correct!
+        pe = pe.unsqueeze(1)  # Yes dimension is correct. X is (t words, N batch size, num features (512))
         self.register_buffer('pe', pe)
 
     def forward(self, x):
         # Part (1b)
         # TODO: add positional embeddings to the inputs. Which of the lines below is correct?
-        #return x + self.pe[:x.size(0), :, :]
-        #return x + self.pe[:, :x.size(1), :]
+        # ---> i.e. make sure the dimension correctly matches the unsqueezed dimension
+        # ---> so the second line is correct
+        # return x + self.pe[:x.size(0), :, :]
+        return x + self.pe[:, :x.size(1), :]
         pass
 
 class MT(nn.Module):
@@ -79,8 +82,9 @@ class MT(nn.Module):
         self.embedding = nn.Embedding(numTokens, self.transformer.d_model)
         self.classifier = nn.Linear(self.transformer.d_model, numTokens)
         # Part (2)
-        # TODO: what should embedding size be for the PositionalEncoding?
-        self.pos_encoder = PositionalEncoding(0)  # TODO: fix me
+        # what should embedding size be for the PositionalEncoding?
+        # Answer --> it needs to match the embedding size of the transformer
+        self.pos_encoder = PositionalEncoding(self.transformer.d_model) 
         self.device = device
         self.padTokenId = padTokenId
 
@@ -91,14 +95,22 @@ class MT(nn.Module):
         # the transformer doesn't try to cheat by looking into the future!
         # Also make sure not to omit padding tokens.
         # ...
+        src_embedded = self.embedding(src) 
+        trg_embedded = self.embedding(trg)
+        src_embedded += self.pos_encoder(src_embedded)
+        trg_embedded += self.pos_encoder(trg_embedded)
+        
+        X = src_embedded
+        Y = trg_embedded
+
         mask = nn.Transformer.generate_square_subsequent_mask(Y.shape[0], device=self.device)  # causal mask
         out = self.classifier(self.transformer(X, Y,
-                                               tgt_mask=mask,
-                                               src_key_padding_mask=None,  # TODO: fix me
-                                               memory_key_padding_mask=None,  # TODO: fix me
-                                               tgt_key_padding_mask=None))  # TODO: fix me
+                               tgt_mask=mask,
+                               src_key_padding_mask=(src == PAD_IDX).transpose(0, 1),
+                               memory_key_padding_mask=(src == PAD_IDX).transpose(0, 1),
+                               tgt_key_padding_mask=(trg == PAD_IDX).transpose(0, 1)))
         return out
-
+    
     def generate(self, src_tensor: Tensor, bos: int, eos: int, vocabLen: int) -> Tensor:
         model.eval()
 
@@ -111,8 +123,8 @@ class MT(nn.Module):
             output = model(src_tensor, generated)
             logits = output[-1, 0, :]  # Get the last token's logits
             # Part (4)
-            # TODO: Get the most likely next token
-            next_token = None  # TODO: fix me
+            # Get the most likely next token
+            next_token = torch.argmax(logits, dim=-1)
             if next_token == eos:
                 break
             generated = torch.cat((generated, next_token.unsqueeze(0).unsqueeze(0)), dim=0)
@@ -140,8 +152,11 @@ def train(model: nn.Module,
         output = model(src, trg)
 
         # Part (5)
-        # TODO: apply the correct loss to the predictions
-        # loss = criterion(...)
+        # Apply the correct loss to the predictions
+        output_dim = output.shape[-1]
+        output = output.view(-1, output_dim)
+        trg = trg.view(-1)
+        loss = criterion(output, trg)
 
 
         loss.backward()
