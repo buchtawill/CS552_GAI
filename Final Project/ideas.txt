@@ -1,0 +1,30 @@
+
+ - Text to Tesla Coil Midi
+    - When describing midi files, mention the following
+        - Train an embedding space on a very large dataset of midi 
+        - Text to Midi under certain constraints (start with text to midi, ignore constraints)
+        - Text to vector using pre-trained embedding model
+        - Problem Midi to vector (Museformer, REMIs (REvamped MIDI-inspired))
+        - Bootstrapping to create more midi data
+        - Standard transformer model to map from x tokens to y tokens. Need to generate Y(t+1)
+        - Need to get from y vector sequence back into MIDI.
+        - Train an encoder-decoder to get from y vector tokens back into midi data 
+        - Sike already exists
+
+ - Text prompt to circuit overview / block diagram
+    - Start with "I want to create a temperature sensor board that can interface over UART 
+      to a motherboard, the sensor board also needs to include voltage and current data"
+
+An "escape room" style game, where a player interacts with multiple NPCs, and the goal of the game
+is a flag or other task, defined by an LLM every time.
+    - A set of fixed locations, plus one or two newly generated locations.
+        - An chill bar
+        - Atwater Kent ECE building
+        - A Wizard's lab
+        - A library
+        - The collosseum
+
+Example game settings:
+    - You find yourself inexplicably transported to a series of strange and interconnected locations. A cryptic message hints that solving the secrets within each place is the only way back to reality.
+
+All in-text prompt quotes will use single-quotation marks
