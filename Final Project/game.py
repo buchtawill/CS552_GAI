@@ -203,10 +203,13 @@ def get_dalle_loc_img(main)->Image:
     tone = main['setup']['theme']
     loc = main['state']['location']
     desc = main['locations'][loc]['desc']
+    npc_name = master_dict['locations'][loc]['npc_name']
+    npc_desc = master_dict['npcs'][npc_name]['npc_desc']
     
     proompt = f"you are a graphic designer for a video game. Generate an image that follows this environment: {main['setup']['environment']}. "
     proompt += f"The theme of the game is {tone}. Do not include text in the image. "
-    proompt += f"Specifically, generate an image of the given location: {loc} ({desc})."
+    proompt += f"Specifically, generate an image of the given location: {loc} ({desc}). In the image, include the character: "
+    proompt += f"{npc_name}: {npc_desc}. "
 
     write_to_log(f"Getting image from Dalle. Prompt: {proompt}")
     response = client.images.generate(
