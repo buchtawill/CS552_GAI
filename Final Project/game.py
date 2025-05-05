@@ -10,12 +10,12 @@ from PIL import Image
 from io import BytesIO
 import matplotlib.pyplot as plt
 
-from prompt import *
+from prompt import * # A set of predefined prompts
 from api_key import OPENAI_API_KEY as KEY
 
 # MODEL_SNAPSHOT = "gpt-4.1-nano-2025-04-14"
 MODEL_SNAPSHOT = "gpt-4.1-2025-04-14"
-LOG_NAME = 'game_log.txt'
+LOG_NAME = 'game_history.log'
 
 LOC_NAMES = {
     "ak": "The Atwater Kent Electrical Engineering Building",
@@ -25,7 +25,7 @@ LOC_NAMES = {
     "rome": "The Roman Colosseum",
 }
 
-GAME_TONES = ["1980s college", "1800s england", "rural america with rednecks", "japanese anime", "wild wild west"]
+GAME_TONES = ["Harry Potter", "1800s england", "epic japanese anime", "wild wild west"]
 
 LOC_DESC = {
     "ak": "A sprawling, old building humming with the ghosts of innovation and forgotten experiments. Tesla coils can be heard buzzing around from time to time",
@@ -211,12 +211,11 @@ def play_round(context:str, setup:dict, state:dict, history:list)->list[dict, st
     
     npc_name = setup['characters'][state['location']]['name']
     print(f"You are now at {LOC_NAMES[state['location']]} and encounter {npc_name}.")
-    img = get_dalle_loc_img(setup, state)
-    # Display the image
-    plt.imshow(img)
-    plt.axis('off')  # Turn off axis labels
-    plt.title(f"Location: {LOC_NAMES[state['location']]}")
-    plt.show()
+    # img = get_dalle_loc_img(setup, state)
+    # plt.imshow(img)
+    # plt.axis('off')  # Turn off axis labels
+    # plt.title(f"Location: {LOC_NAMES[state['location']]}")
+    # plt.show()
     
     # Prompt the LLM for the next response
     instruction = f"The player is at {state['location']} during round {state['round']}. Give the player the next logical thing "

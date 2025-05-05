@@ -1,3 +1,5 @@
+
+# This prompt tells the LLM to create the game with NPCs and personalities
 INIT_GAME_PROMPT = """
 Generate an initial game state. I need the following information:
 First, The names of five characters, each bound to one of the given locations
