@@ -198,15 +198,19 @@ def slow_print(s:str, delay=0.02):
         print(char, end='', flush=True)
         time.sleep(delay)
 
-def get_dalle_loc_img(setup:dict, state:dict)->Image:
+def get_dalle_loc_img(main)->Image:
     
-    proompt = f"you are a graphic designer for a video game. Generate an image that follows this environment: {setup['environment']}. "
-    proompt += f"The theme of the game is {setup['tone']}. Do not include text in the image. "
-    proompt += f"Specifically, generate an image of the given location: {state["location"]} ({LOC_DESC[state['location']]}) under these constraints."
+    tone = main['setup']['theme']
+    loc = main['state']['location']
+    desc = main['locations'][loc]['desc']
+    
+    proompt = f"you are a graphic designer for a video game. Generate an image that follows this environment: {main['setup']['environment']}. "
+    proompt += f"The theme of the game is {tone}. Do not include text in the image. "
+    proompt += f"Specifically, generate an image of the given location: {loc} ({desc})."
 
     write_to_log(f"Getting image from Dalle. Prompt: {proompt}")
     response = client.images.generate(
-        model="dall-e-2",    # dall e 2 is cheaper
+        model="dall-e-3",    # dall e 2 is cheaper
         prompt=proompt,
         size="1024x1024",
         n=1,
@@ -246,10 +250,10 @@ def play_round(master_dict:dict)->dict:
     npc_name = master_dict['locations'][current_loc]['npc_name']
     print(f"You are now at {current_loc} and encounter {npc_name}.")
     
-    # img = get_dalle_loc_img(setup, state)
+    # img = get_dalle_loc_img(master_dict)
     # plt.imshow(img)
     # plt.axis('off')  # Turn off axis labels
-    # plt.title(f"Location: {LOC_NAMES[state['location']]}")
+    # plt.title(f"Location: {current_loc}")
     # plt.show()
     
     # Prompt the LLM for the next response
