@@ -1,67 +1,86 @@
 
+# This is a fixed string that will be included at the top of every prompt
+GAME_CONTEXT = """
+You are running a game. The goal of the game is for the player (a human) to talk to multiple NPCs and find their way back home. 
+The player can win by entering a secret passphrase that must be retrieved from one of the NPCs.
+The point of the game is to be generative and novel every time it's played. You must decide ALL actions of the game.
+
+Not every NPC knows who has the passphrase. They might suggest traveling to a different location.
+
+The player should have to visit between 3-5 locations before unveiling the passphrase. Keep that in mind when running the game.
+To get any information about what the passphrase is or who holds it, the player should have to complete some sort of task. 
+This task could be an easy riddle, a simple math problem, a basic question about deeplearning, or something along those lines.
+Keep a balance of tasks between those. Do not only stick to one type of task.
+
+ONLY ONE NPC KNOWS THE PASSPHRASE. To retrieve the passphrase, the player must convince the NPC to either give it,
+or solve a simple (easy) riddle to get a hint about who has it.
+
+If the player cannot solve the ridle in 2-3 tries, they can come back later to try a new one.
+The game should run for 3-5 rounds, where each round is a set of interactions with an NPC at a single location.
+
+If the player goes to the NPC with the passphrase at the first round, have the NPC misdirect them.
+
+Do not include any special characters in your response, just ASCII. Do not include apostrophes either. 
+Keep responses as short and concise as possible. Do not talk about the game, just respond to the prompt as-is, unless asked to do so otherwise.
+
+
+"""
+
 # This prompt tells the LLM to create the game with NPCs and personalities
 INIT_GAME_PROMPT = """
 Generate an initial game state. I need the following information:
-First, The names of five characters, each bound to one of the given locations
-(Underground Speakeasy, Atwater Kent Electrical Engineering building, Wizard's Lab, Library, Roman Colosseum)
-the character name can be retrieved by accessing json['characters'][location]['name'].
-Also include a description (key 'description'), a concise sentence about personality.
-This can be retrieved at json['characters'][location]['description']
+First, give me five randomly generated locations according to the tone of the game. For each location, also generate 
+a character at that location, along with a 2-3 sentence character description, and a 2-3 sentence location description. 
+Everything should fit the tone. 
+
+I would also like a list of the locations, and shorthand references for each location, under the key "locations". 
+The shorthand should be 2-3 characters that a user can easily type. The shorthand should be in lower-case.
 
 Second, I also need to know what the passphrase is, and who holds that information (the name of one of the characters).
-These keys should be the strings 'passphrase' and 'passphrase_holder' in the top level of the json.
-Do not include any quotation marks or apostrophes in the passphrase
 
 Third, set the environment of the game. This will be used to generate a texture map, so make it detailed enough
-for a diffusion model to generate from (2-3 sentences). Have this under the key 'evironment'
+for an image diffusion model to generate from (3-4 sentences). Have this under the key 'environment'. 
 
-Lastly, give me a three-sentence piece of context that can be fed back into an LLM to continue running the game. This should be 
-under the key 'context'. You can make the goal of the game to be whatever you want, as long as the player needs to find a key.
+Lastly, give me a three-sentence piece of context that can given to a human player so they know how to play the game
+under the key 'context'. You can make the goal of the game to be whatever you want, as long as the player needs to find a key. Example:
+"From the shadowy corners of a hidden alleyway to the hushed halls of an antiquarian bookshop and the lively chatter of a public house, each location holds secrets and potential clues. You'll encounter a cast of intriguing characters, from street urchins to refined ladies, each with their own agendas and pieces of the puzzle. Uncovering a hidden passphrase, whispered amongst these individuals, is key to navigating the mysteries that lie within this atmospheric Victorian world."
 
-Format your response as a json string, with character names (as strings in quotation marks)
-as the top-level keys in the 'characters' dictionary.
+Format your response as a json string. Please adhere to the following format:
 
-Summary of format:
+Summary of format for the json file:
 {
-"characters":
-    -- "[location name]":
-    --  -- "name" : the name of the character
-    --  -- "description" : what the NPC is like
-"passphrase" : you decide
-"passphrase_holder": one of the NPCs
-"context" : the context
-"environment" : the environment
-}
-"""
-
-"""
-Example json response for first prompt:
-{
-"characters": {
-    "bar": {
-        "name": "Mack the Mixologist",
-        "description": "Jovial bartender who insists every problem can be shaken or stirred."
+    "theme": "<the theme of the game>",
+    "n_locations": an integer number of locations,
+  "locations": [
+    {
+      "name": "<location 1>",
+      "desc": "<descriotion of location 1>",
+      "ref": "<shorthand code for location 1>",
+      "theme_relevance": "<The relevance of location 1 to the theme>"
     },
-    "ak": {
-        "name": "Professor Wattson",
-        "description": "Eccentric engineer, obsessed with electricity and fond of dramatic hand gestures."
-    },
-    "lab": {
-        "name": "Fizzicus the Wobbly Wizard",
-        "description": "Absent-minded, enthusiastic about magical mishaps and explosive experiments."
-    },
-    "library": {
-        "name": "Agnes Bookbinder",
-        "description": "Serious, shushing librarian who secretly enjoys bad puns and forbidden lore."
-    },
-    "rome": {
-        "name": "Maximus Decimus Quirkus",
-        "description": "Overly dramatic gladiator who quotes ancient proverbs, usually incorrectly."
+    ... # LOCATIONS 2-4 OMITTED FOR CONCISENESS
+    {
+      "name": "<location 5>",
+      "desc": "<descriotion of location 5>",
+      "ref": "<shorthand code for location 5>",
+      "theme_relevance": "<The relevance of location 5 to the theme>"
     }
-},
-"passphrase": "wombat dance party",
-"passphrase_holder": "Fizzicus the Wobbly Wizard",
-"evironment": "A surreal campus stitched together by improbable physics: the colossal colosseum looms a stone�s throw from a glimmering laboratory filled with smoke, while the Atwater Kent building crackles with electrical arcs. The ancient library towers with impossible book-laden spires, and underground, a cozy bar radiates golden light and muffled laughter. Above it all, a patchwork sky shifts between thunderclouds, magical auroras, and Roman sunlight.",
-"context": "You awaken at home with no memory of how you got there or how to leave. To escape, you must find a secret key phrase tied to one of the five quirky characters scattered around this bizarre campus. Each NPC knows who has the phrase, but some might point you in the wrong direction."
+  ],
+  "npcs_by_loc": {
+    "<location 1>": {
+      "npc_name": "<Name of npc at location 1>",
+      "npc_desc": "<A 1-2 sentence description of the NPC personality at location 1>",
+    },
+    ... # LOCATIONS 2-4 OMITTED FOR CONCISENESS
+    "<location 5>": {
+      "npc_name": "<Name of npc at location 5>",
+      "npc_desc": "<A 1-2 sentence description of the NPC personality at location 5>",
+    }
+  },
+  "passphrase": "<a passphrase you generate>",
+  "passphrase_holder": "<one of the npcs>",
+  "context": "<an intro for the human player>",
+  "environment" : "<a potential base prompt for an image generation model">
 }
 """
+
