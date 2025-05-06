@@ -1,3 +1,4 @@
 api_key.py
 *.log
 overview.docx
+resources/*

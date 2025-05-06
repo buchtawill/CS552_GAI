@@ -2,8 +2,10 @@ import os
 import time
 import json
 import random
-from openai import OpenAI
-import openai
+
+import log
+if os.path.exists(log.LOG_NAME):
+    os.remove(log.LOG_NAME)
 
 import requests
 from PIL import Image
@@ -13,20 +15,10 @@ import matplotlib.pyplot as plt
 from prompt import * # A set of predefined prompts
 from api_key import OPENAI_API_KEY as KEY
 
-# MODEL_SNAPSHOT = "gpt-4.1-nano-2025-04-14"
-MODEL_SNAPSHOT = "gpt-4.1-2025-04-14"
-LOG_NAME = 'gamelog.log'
+from api_calls import prompt_llm
 
-GAME_TONES = ["Harry Potter", "1800s england", "epic japanese anime", "wild wild west", "cyberpunk, sci-fi, yet dystopian"]
-
-def write_to_log(s:str, level=99):
-    try:
-        with open(LOG_NAME, 'a') as f:
-            f.write(s+'\n')
-            f.flush()
-    except Exception as e:
-        print(f"ERROR [game.py::write_to_log] Error writing to log: {e}")
-    
+# GAME_TONES = ["Harry Potter", "1800s england", "epic japanese anime", "wild wild west", "cyberpunk, sci-fi, yet dystopian"]
+GAME_TONES = ["Japanese Anime"]
 
 def generate_initial_premise()->str:
 
@@ -45,8 +37,8 @@ def get_dicts_from_json(json: dict):
         json(dict): The json object to parse.
     
     returns:
-        locations(dict): A dictionary of locations, with natural numbers as the key to each location
-        npcs(dict): A dictionary of NPCs, with the location reference as the key to a sub dict
+        locations(dict): A dictionary of locations
+        npcs(dict): A dictionary of NPCs
     
     """
     
@@ -65,6 +57,8 @@ def get_dicts_from_json(json: dict):
         locs[loc_name] = {
             "ref": current_loc_dict['ref'],
             "desc": current_loc_dict['desc'],
+            "pixelart_prompt":current_loc_dict["pixelart_prompt"],
+            "pixelart_icon":current_loc_dict["pixelart_icon"],
             "relevance": current_loc_dict['theme_relevance'],
             "npc_name": json['npcs_by_loc'][loc_name]['npc_name']
         }
@@ -72,6 +66,7 @@ def get_dicts_from_json(json: dict):
         # Duplicate the npcs dict to have the name of location as the key for ease of access
         npcs[loc_npc_name] = {
             "npc_desc": json['npcs_by_loc'][loc_name]['npc_desc'],
+            "npc_art_prompt": json['npcs_by_loc'][loc_name]['npc_art_prompt'],
             "npc_location": loc_name
         }
 
@@ -83,20 +78,20 @@ def get_game_setup(context)->dict:
     Do the initial prompt to the LLM to get the locations and characters set up.
     """
     
-    write_to_log("INFO [game.py::get_game_setup()] Requesting initial game state.")
+    log.write_to_log("INFO [game.py::get_game_setup()] Requesting initial game state.")
     prompt = context + INIT_GAME_PROMPT
-    # write_to_log("INFO [game.py::get_game_setup()] Initial prompt: ")
-    # write_to_log(prompt)
+    # log.write_to_log("INFO [game.py::get_game_setup()] Initial prompt: ")
+    # log.write_to_log(prompt)
     
     response = prompt_llm(prompt)
     
-    write_to_log("INFO [game.py::get_game_setup()] Parsing game state response.")
+    log.write_to_log("INFO [game.py::get_game_setup()] Parsing game state response.")
     
     # Start processing the initial game state
     try:
         game_setup = json.loads(response)
     except Exception as e:
-        write_to_log("ERROR [game.py::get_game_setup()] Error parsing game state response: " + str(e))
+        log.write_to_log("ERROR [game.py::get_game_setup()] Error parsing game state response: " + str(e))
         exit()
     
     locations, npcs = get_dicts_from_json(game_setup)
@@ -107,35 +102,14 @@ def get_game_setup(context)->dict:
         npc = locations[loc]['npc_name']
         npc_desc = npcs[npc]['npc_desc']
         
-        write_to_log(f"INFO [game.py::get_game_setup()] {name}: {desc}")
-        write_to_log(f"INFO [game.py::get_game_setup()]   - NPC at {name}: {npc}. {npc_desc}")
+        log.write_to_log(f"INFO [game.py::get_game_setup()] {name}: {desc}")
+        log.write_to_log(f"INFO [game.py::get_game_setup()]   - NPC at {name}: {npc}. {npc_desc}")
         
-    write_to_log(f"INFO [game.py::get_game_setup()] Passphrase is   {game_setup['passphrase']}")
-    write_to_log(f"INFO [game.py::get_game_setup()] Passphrase NPC: {game_setup['passphrase_holder']}")
-    write_to_log(f"INFO [game.py::get_game_setup()] Context: {game_setup['context']}")
+    log.write_to_log(f"INFO [game.py::get_game_setup()] Passphrase is   {game_setup['passphrase']}")
+    log.write_to_log(f"INFO [game.py::get_game_setup()] Passphrase NPC: {game_setup['passphrase_holder']}")
+    log.write_to_log(f"INFO [game.py::get_game_setup()] Context: {game_setup['context']}")
     
     return game_setup, locations, npcs
-
-def prompt_llm(prompt)->str:
-    """
-    A wrapper around the API call to openai
-    """
-    
-    write_to_log("INFO [game.py] Prompting LLM:")
-    write_to_log("INFO [game.py] ------------------------- Start of prompt -------------------------")
-    write_to_log(prompt)
-    write_to_log("INFO [game.py] -------------------------- End of prompt --------------------------")
-    response = client.responses.create(
-        model = MODEL_SNAPSHOT,
-        input=prompt
-    )
-    if(response.error):
-        write_to_log("ERROR [game.py::get_game_setup()] OpenAI API error: " + response.error)
-        exit()
-    
-    write_to_log(response.output_text)
-        
-    return response.output_text
 
 def get_playtime_prompt(setup:dict, state:dict, history:list):
     """
@@ -198,36 +172,6 @@ def slow_print(s:str, delay=0.02):
         print(char, end='', flush=True)
         time.sleep(delay)
 
-def get_dalle_loc_img(main)->Image:
-    
-    tone = main['setup']['theme']
-    loc = main['state']['location']
-    desc = main['locations'][loc]['desc']
-    npc_name = master_dict['locations'][loc]['npc_name']
-    npc_desc = master_dict['npcs'][npc_name]['npc_desc']
-    
-    proompt = f"you are a graphic designer for a video game. Generate an image that follows this environment: {main['setup']['environment']}. "
-    proompt += f"The theme of the game is {tone}. Do not include text in the image. "
-    proompt += f"Specifically, generate an image of the given location: {loc} ({desc}). In the image, include the character: "
-    proompt += f"{npc_name}: {npc_desc}. "
-
-    write_to_log(f"Getting image from Dalle. Prompt: {proompt}")
-    response = client.images.generate(
-        model="dall-e-3",    # dall e 2 is cheaper
-        prompt=proompt,
-        size="1024x1024",
-        n=1,
-    )
-    
-    image_url = response.data[0].url
-    write_to_log(f"Image URL: {image_url}")
-
-    # Download the image
-    response = requests.get(image_url)
-    image = Image.open(BytesIO(response.content))
-
-    return image
-
 def play_round(master_dict:dict)->dict:
     '''
     Play a round of the game. This function will be called repeatedly until the game is over.
@@ -252,12 +196,6 @@ def play_round(master_dict:dict)->dict:
     curr_round = master_dict['state']['round']
     npc_name = master_dict['locations'][current_loc]['npc_name']
     print(f"You are now at {current_loc} and encounter {npc_name}.")
-    
-    # img = get_dalle_loc_img(master_dict)
-    # plt.imshow(img)
-    # plt.axis('off')  # Turn off axis labels
-    # plt.title(f"Location: {current_loc}")
-    # plt.show()
     
     # Prompt the LLM for the next response
     instruction_base = get_playtime_prompt(master_dict['setup'], master_dict['state'], master_dict['history'])
@@ -303,20 +241,6 @@ def play_round(master_dict:dict)->dict:
 
 if __name__ =='__main__':
     
-    # delete the log file if it exists
-    if os.path.exists(LOG_NAME):
-        os.remove(LOG_NAME)
-    # create a new log file
-    with open(LOG_NAME, 'w') as f:
-        f.write("Game log\n")
-        f.write("========\n")
-    
-    client = OpenAI(api_key=KEY)
-    # l = client.models.list()
-    # for m in l:
-        # print(m)
-    # exit()    
-
     premise, tone = generate_initial_premise()
     
     # game_setup can be fed back into an LLM to provide context of the current game
@@ -336,16 +260,16 @@ if __name__ =='__main__':
         'locations': locations      # Dict of locations
     }
     
-    write_to_log("############################### setup ###############################")
-    write_to_log(json.dumps(master_dict['setup'], indent=4))
-    write_to_log("############################### NPCS ############################### ")
-    write_to_log(json.dumps(master_dict['npcs'], indent=4))
-    write_to_log("############################### Locations ###############################")
-    write_to_log(json.dumps(master_dict['locations'], indent=4))
+    log.write_to_log("############################### setup ###############################")
+    log.write_to_log(json.dumps(master_dict['setup'], indent=4))
+    log.write_to_log("############################### NPCS ############################### ")
+    log.write_to_log(json.dumps(master_dict['npcs'], indent=4))
+    log.write_to_log("############################### Locations ###############################")
+    log.write_to_log(json.dumps(master_dict['locations'], indent=4))
     
     
     # Start the game
-    write_to_log("INFO [game.py] Starting game.")
+    log.write_to_log("INFO [game.py] Starting game.")
     
     print("Welcome!")
     print(game_setup['context'])

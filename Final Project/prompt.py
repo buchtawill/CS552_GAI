@@ -56,6 +56,8 @@ Summary of format for the json file:
       "name": "<location 1>",
       "desc": "<descriotion of location 1>",
       "ref": "<shorthand code for location 1>",
+      "pixelart_prompt": "<a 3-4 sentence prompt for a diffusion model that can be used to generate images of this location>",
+      "pixelart_icon": "<A 3-4 sentence prompt for a diffusion model that can be used to generate an icon of this location>",
       "theme_relevance": "<The relevance of location 1 to the theme>"
     },
     ... # LOCATIONS 2-4 OMITTED FOR CONCISENESS
@@ -63,6 +65,8 @@ Summary of format for the json file:
       "name": "<location 5>",
       "desc": "<descriotion of location 5>",
       "ref": "<shorthand code for location 5>",
+      "pixelart_prompt": "<a 3-4 sentence prompt for a diffusion model that can be used to generate images of this location>",
+      "pixelart_icon": "<A 3-4 sentence prompt for a diffusion model that can be used to generate an icon of this location>",
       "theme_relevance": "<The relevance of location 5 to the theme>"
     }
   ],
@@ -70,17 +74,22 @@ Summary of format for the json file:
     "<location 1>": {
       "npc_name": "<Name of npc at location 1>",
       "npc_desc": "<A 1-2 sentence description of the NPC personality at location 1>",
+      "npc_art_prompt": "<A 2-3 sentence description of what the NPC looks like, which can be fed into a diffusion model>"
     },
     ... # LOCATIONS 2-4 OMITTED FOR CONCISENESS
     "<location 5>": {
       "npc_name": "<Name of npc at location 5>",
       "npc_desc": "<A 1-2 sentence description of the NPC personality at location 5>",
+      "npc_art_prompt": "<A 2-3 sentence description of what the NPC looks like, which can be fed into a diffusion model>"
     }
   },
   "passphrase": "<a passphrase you generate>",
   "passphrase_holder": "<one of the npcs>",
   "context": "<an intro for the human player>",
-  "environment" : "<a potential base prompt for an image generation model">
+  "environment" : "<a potential base prompt for an image generation model">,
+  
+  "player_art_prompt": "<A 3-4 sentence description that can be fed to a diffusion model to generate the main character>",
+  "special_sprite" : "<A 2-3 sentence description of another background sprite that can be sprinkled throughout the map>"
 }
 """
 
