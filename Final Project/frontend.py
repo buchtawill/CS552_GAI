@@ -166,8 +166,9 @@ def get_game_art(game_setup:dict, locs:dict, npcs:dict):
     1 background tile, TILE_SIZE x TILE_SIZE, 1 credit
     1 special sprite, half of tile size, 1 credit
     1 player sprite, PLAYER_SIZE[0] x PLAYER_SIZE[1]
+    1 home sprite
     
-    28 total credits / ~30 cents per function call :(
+    29 total credits / ~35 cents per function call :(
         
     Args:
         game_setup(dict): The game setup dict created by chat GPT
@@ -811,6 +812,12 @@ def main_game_loop():
 
 if __name__ == "__main__":
     
+    NEW_GAME = 0
+    LOAD_SAVED = 1
+    
+    # game_mode = LOAD_SAVED
+    game_mode = NEW_GAME
+    
     # Initialize pygame
     pygame.init()
     screen = pygame.display.set_mode(window_size)
@@ -820,25 +827,28 @@ if __name__ == "__main__":
     font = pygame.font.SysFont(None, 24)
     bigfont = pygame.font.Font(None, 48)
     
-    # Initialize everything else
-    tone = input("Enter the tone of the game (e.g. 'anime', 'fantasy', 'sci-fi'): ")
-    premise = game.generate_initial_premise(desired_tone=tone)
-    game_setup, locations, npcs = game.get_game_setup(premise)
-    t = time.time()
-    art_assets, art_paths = get_game_art(game_setup, locations, npcs)
-    print(f"Total time to load game assets: {(time.time() - t) :4.2f} Seconds")
-    print(json.dumps(art_paths, indent=4))
+    # Initialize A new game
+    if(game_mode == NEW_GAME):
+        tone = input("Enter the tone of the game (e.g. 'anime', 'fantasy', 'sci-fi'): ")
+        premise = game.generate_initial_premise(desired_tone=tone)
+        game_setup, locations, npcs = game.get_game_setup(premise)
+        t = time.time()
+        art_assets, art_paths = get_game_art(game_setup, locations, npcs)
+        print(f"Total time to load game assets: {(time.time() - t) :4.2f} Seconds")
+        print(json.dumps(art_paths, indent=4))
+        
+        # Save
+        with open(f'resources/game_setup_{tone.replace(' ', '_')}.pkl', 'wb') as f:
+            p = (game_setup, locations, npcs, art_paths, premise)
+            pickle.dump(p, f)
     
-    # Save
-    with open('resources/game_setup_wpi.pkl', 'wb') as f:
-        p = (game_setup, locations, npcs, art_paths, premise)
-        pickle.dump(p, f)
-    
-    # Load
-    # with open('resources/game_setup_college.pkl', 'rb') as f:
-    #     p = pickle.load(f)
-    #     game_setup, locations, npcs, art_paths, premise = p
-    #     art_assets = load_assets_from_paths(art_paths)
+    # Load a saved game
+    elif game_mode == LOAD_SAVED:
+        # with open('resources/game_setup_wpi.pkl', 'rb') as f:
+        with open('resources/game_setup_epic_anime.pkl', 'rb') as f:
+            p = pickle.load(f)
+            game_setup, locations, npcs, art_paths, premise = p
+            art_assets = load_assets_from_paths(art_paths)
         
     game_state = {
         'round' : 0,
