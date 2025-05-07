@@ -15,7 +15,10 @@ import os
 import log 
 if os.path.exists(log.LOG_NAME):
     os.remove(log.LOG_NAME)
+    
+import base64
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Constants ---
 TILE_SIZE = 64
@@ -45,6 +48,7 @@ S_IN_LOCATION      = 1
 S_GET_PLAYER_NAME  = 2
 S_PRINT_GAME_INFO  = 3
 S_GET_PLAYER_INPUT = 4
+S_GUESS_PASSPHRASE = 5
 
 S_NPC_PROMPT_LLM    = 0
 S_NPC_TALK          = 1
@@ -52,7 +56,7 @@ S_PLAYER_TURN       = 2
 S_WAIT_READ         = 3 # Wait for 2-3 seconds for the player to read the text 
 
 # Number of icons to place in the world
-NUM_BG_SPRITES = random.randint(15, 30)  # Random number between 5 and 15 icons
+NUM_BG_SPRITES = random.randint(40, 50)  # Random number between 5 and 15 icons
 
 # Create a list to store icon positions (as Rects or tuples)
 bg_sprite_pos = []
@@ -172,12 +176,12 @@ def get_game_art(game_setup:dict, locs:dict, npcs:dict):
     
     # Generate background floor tile
     write_to_log(f"INFO [frontend.py::get_game_art()] Getting background floor tile")
-    prompt = f"A very lightly-detailed tile of a floor with the theme {game_setup['theme']}. The color palette is light. There is very little information in this tile."
-    floor_tile_path, floor_b64 = get_pixel_art(prompt, size=(TILE_SIZE, TILE_SIZE), style="texture", b_tile=True, rm_bg=False)
+    prompt = f"A lightly-detailed tile of a floor with the theme {game_setup['theme']}. The color palette is light."
+    floor_tile_path, floor_b64 = get_pixel_art(prompt, size=(TILE_SIZE, TILE_SIZE), style="simple", b_tile=True, rm_bg=False)
     
     # Generate wall tile for world boundary
     write_to_log(f"INFO [frontend.py::get_game_art()] Getting wall tile")
-    prompt = f"A Wall tile according to the theme {game_setup['theme']}. This is a world boundary for the game, and should be dense with lots of detail. The color palette is dark."
+    prompt = f"A dark wall tile according to the theme {game_setup['theme']}. This is a world boundary for the game, and should be dense with lots of detail. The color palette is dark."
     wall_tile_path, _ = get_pixel_art(prompt, size=(TILE_SIZE, TILE_SIZE), style="texture", b_tile=True, rm_bg=False, input_b64=floor_b64)
     
     # Generate background sprite
@@ -248,7 +252,7 @@ def handle_events(events:pygame.event, render_state):
     keys = pygame.key.get_pressed()
     if keys[pygame.K_ESCAPE]:
         return False
-    if keys[pygame.K_q] and ((render_state != S_GET_PLAYER_NAME) and (render_state != S_NPC_TALK)):
+    if keys[pygame.K_q] and ((render_state != S_GET_PLAYER_NAME) and (render_state != S_NPC_TALK) and (render_state != S_GUESS_PASSPHRASE)):
         return False
     return True
 
@@ -439,6 +443,8 @@ def draw_icons():
         # Draw the actual icon on top
         game_surface.blit(art_assets['home_icon'], (home_rect.x, home_rect.y))
     
+        if(player_rect.colliderect(home_rect)): colliding_loc_icon = "home"
+
     return colliding_loc_icon
 
 def draw_popup_text(surface, text:str, position, width=200, height=60):
@@ -601,7 +607,6 @@ def main_game_loop():
     
     render_state = S_GET_PLAYER_NAME
     interaction_state = S_NPC_PROMPT_LLM
-    current_location = 'main'
     
     while running:
         dt = clock.tick(60)
@@ -619,20 +624,47 @@ def main_game_loop():
 
             draw_background()
             colliding_icon = draw_icons()
+            
             draw_player()
             draw_minimap()            
         
             # Check if the player is over any icons, and if so, pop up some text
             if(colliding_icon):
+                if(colliding_icon == 'home'):
+                    popup_text = "Press Enter to guess the passphrase"
+                else:
+                    popup_text = f"Press Enter to go into {colliding_icon}"
                 width = 350
-                popup_text = f"Press Enter to go into {colliding_icon}"
                 popup_position = ((base_res[0] // 2) - width/2, base_res[1] - (base_res[1] // 4))  # Centered bottom
                 draw_popup_text(game_surface, popup_text, popup_position, width=width, height=60)
                 
                 # Check if the enter key was pressed
                 if(check_enter_pressed(events)):
-                    master_dict['state']['location'] = colliding_icon
-                    render_state = S_IN_LOCATION
+                    if(colliding_icon == 'home'):
+                        render_state = S_GUESS_PASSPHRASE
+                    
+                    else:
+                        master_dict['state']['location'] = colliding_icon
+                        render_state = S_IN_LOCATION
+                    
+        elif(render_state == S_GUESS_PASSPHRASE):
+            draw_background()
+            _ = draw_icons()
+            draw_player()
+            draw_minimap()     
+            
+            input_box_pos = (base_res[0] // 2 - 150, base_res[1] - 200)  # Centered
+            master_dict['player_response'], finished = handle_text_input(events, game_surface, master_dict['player_response'], font, input_box_pos, prompt_text="Guess passphrase (or 'LEAVE'): ")
+            if finished:
+                # Check if the player correctly guessed the passphrase
+                if(master_dict['player_response'] == master_dict['setup']['passphrase']):
+                    print("You guessed the passphrase!")
+                    running = False
+                elif(master_dict['player_response'] == 'LEAVE'):
+                    render_state = S_MAIN_WORLD
+                else:
+                    print("Incorrect passphrase. Try again.")
+                master_dict['player_response'] = ""
         
         elif(render_state == S_IN_LOCATION):
             loc = master_dict['state']['location']
@@ -679,7 +711,6 @@ def main_game_loop():
                         render_state = S_MAIN_WORLD
                     else:
                         master_dict['history'].append(master_dict['player_response'])
-                        master_dict['player_response'] = ""
                     master_dict['player_response'] = ""
                     interaction_state = S_NPC_PROMPT_LLM
             
@@ -722,16 +753,18 @@ if __name__ == "__main__":
     # tone = input("Enter the tone of the game (e.g. 'anime', 'fantasy', 'sci-fi'): ")
     # premise = game.generate_initial_premise(desired_tone=tone)
     # game_setup, locations, npcs = game.get_game_setup(premise)
+    # t = time.time()
     # art_assets, art_paths = get_game_art(game_setup, locations, npcs)
+    # print(f"Total time to load game assets: {(time.time() - t) :4.2f} Seconds")
     # print(json.dumps(art_paths, indent=4))
     
     # Save
-    # with open('resources/game_setup_anime.pkl', 'wb') as f:
+    # with open('resources/game_setup_forrest.pkl', 'wb') as f:
     #     p = (game_setup, locations, npcs, art_paths, premise)
     #     pickle.dump(p, f)
     
     # Load
-    with open('resources/game_setup_anime.pkl', 'rb') as f:
+    with open('resources/game_setup_forrest.pkl', 'rb') as f:
         p = pickle.load(f)
         game_setup, locations, npcs, art_paths, premise = p
         art_assets = load_assets_from_paths(art_paths)
@@ -754,7 +787,7 @@ if __name__ == "__main__":
 
     # --- Player Setup (World Coordinates) ---
     # Start halfway down in the bottom middle world chunk
-    player_world_pos = pygame.Vector2(base_res[0] + base_res[0]//2, base_res[1] + base_res[1]//2)
+    player_world_pos = pygame.Vector2(base_res[0] + base_res[0]//2 - 100, base_res[1] + base_res[1]//2)
     camera_offset = pygame.Vector2(0, 0)
 
     # Define scroll margin: player stays inside this box before scrolling starts
@@ -768,9 +801,6 @@ if __name__ == "__main__":
     initialize_icons()
     main_game_loop()        
 
-
-# from concurrent.futures import ThreadPoolExecutor, as_completed
-# import pygame
 
 # def process_location_assets(loc_name, loc_desc, loc_icon_desc, npc_name, npc_desc):
 #     try:
