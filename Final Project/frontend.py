@@ -83,7 +83,73 @@ def initialize_icons():
 #     for icon in bg_sprite_pos:
 #         icon[0] += 
 
+
+def task_get_player_art(prompt):
+
+    # Generate player sprite
+    write_to_log(f"INFO [frontend.py::get_game_art()::task_get_player_art()] Getting player sprite")
+    player_path, _ = get_pixel_art(prompt, size=PLAYER_SIZE, style="portrait", b_tile=False, rm_bg=True)
+    return player_path
+
+def task_get_home_art(prompt):
+    """
+    Returns:
+        home_icon_path
+    """
+    
+    # Get Home icon
+    write_to_log(f"INFO [frontend.py::get_game_art()::task_get_home_art()] Getting home icon")
+    home_path, _ = get_pixel_art(prompt, size=LOC_ICON_SIZE, style="game_asset", b_tile=False, rm_bg=True)
+    return home_path
+
+def task_get_bg_tiles(theme:str):
+    """
+    Returns:
+        floor_tile_path, wall_tile_path
+    """
+    # Generate background floor tile
+    write_to_log(f"INFO [frontend.py::get_game_art():task_get_bg_tiles()] Getting background floor tile")
+    prompt = f"A lightly-detailed tile of a floor with the theme {theme}. The color palette is light."
+    floor_tile_path, floor_b64 = get_pixel_art(prompt, size=(TILE_SIZE, TILE_SIZE), style="simple", b_tile=True, rm_bg=False)
+    
+    # Generate wall tile for world boundary
+    write_to_log(f"INFO [frontend.py::get_game_art():task_get_bg_tiles()] Getting wall tile")
+    prompt = f"A dark wall tile according to the theme {theme}. This is a world boundary for the game, and should be dense with lots of detail. The color palette is dark."
+    wall_tile_path, _ = get_pixel_art(prompt, size=(TILE_SIZE, TILE_SIZE), style="texture", b_tile=True, rm_bg=False)
+    
+    return floor_tile_path, wall_tile_path
+
+def task_get_bg_sprite(prompt):
+    # Generate background sprite
+    write_to_log(f"INFO [frontend.py::get_game_art()::task_get_bg_sprite()] Getting background sprite")
+    bgnd_sprite_path, _ = get_pixel_art(prompt, size=BG_SPRITE_SIZE, style="game_asset", b_tile=False, rm_bg=True)
+    return bgnd_sprite_path
+
+def task_get_npc(npc_desc):
+    """
+    Returns:
+        npc_path
+    """
+    npc_path, _ = get_pixel_art(npc_desc, size=NPC_SIZE, style="portrait", b_tile=False, rm_bg=True)
+    return npc_path
+
+
+def task_get_loc(loc_desc, icon_desc):
+    """
+    Returns:
+        full_path, icon_path
+    """
+    
+    loc_full_path, loc_b64 = get_pixel_art(loc_desc, size=LOC_SIZE, style="texture", b_tile=False, rm_bg=False)
+        
+    # Icon should be prompted as a game asset, transparent
+    # Send the location image in the prompt with input image
+    loc_icon_path, _ = get_pixel_art(icon_desc, size=LOC_ICON_SIZE, style="game_asset", b_tile=False, rm_bg=False, input_b64=loc_b64)
+    
+    return loc_full_path, loc_icon_path
+
 def get_game_art(game_setup:dict, locs:dict, npcs:dict):
+    
     """
     Given the game setup, containing information regarding each location, get pixel art for
     the main character, background tile + 1 special background sprite,
@@ -103,8 +169,6 @@ def get_game_art(game_setup:dict, locs:dict, npcs:dict):
     
     28 total credits / ~30 cents per function call :(
         
-    TODO: Use threading to get all at the same time.
-    
     Args:
         game_setup(dict): The game setup dict created by chat GPT
         locs(dict): A dictionary containing information and prompts about locations
@@ -142,75 +206,77 @@ def get_game_art(game_setup:dict, locs:dict, npcs:dict):
     
     all_tiles = {}
     all_paths = {}
-    
-    # For every location, generate an icon, a full location, and the NPC
-    for loc_name in locs:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         
-        print(f"INFO [frontend.py::get_game_art()] Requesting textures for {loc_name}")
+        # Submit all non-location/npc tiles
+        write_to_log(f"INFO [frontend.py::get_game_art()] Submitting home icon task")
+        future_home      = executor.submit(task_get_home_art, game_setup['home_icon'])
         
-        write_to_log(f"INFO [frontend.py::get_game_art()] Getting images for location '{loc_name}'")
+        write_to_log(f"INFO [frontend.py::get_game_art()] Submitting player art task")
+        future_player    = executor.submit(task_get_player_art, game_setup['player_art_prompt'])
         
-        loc_desc = locs[loc_name]['pixelart_prompt']
-        loc_icon_desc = locs[loc_name]['pixelart_icon']
+        write_to_log(f"INFO [frontend.py::get_game_art()] Submitting background tiles task")
+        future_bg_tiles  = executor.submit(task_get_bg_tiles, game_setup['theme'])
         
-        npc_name = locs[loc_name]['npc_name']
-        npc_desc = npcs[npc_name]['npc_art_prompt']
+        write_to_log(f"INFO [frontend.py::get_game_art()] Submitting background sprite task")
+        future_bg_sprite = executor.submit(task_get_bg_sprite, game_setup['special_sprite']) 
+    
+        # Get a list of location names from locs dict keys
+        loc_names_list = list(locs.keys())
         
-        npc_path, _ = get_pixel_art(npc_desc, size=NPC_SIZE, style="portrait", b_tile=False, rm_bg=True)
-        loc_full_path, loc_b64 = get_pixel_art(loc_desc, size=LOC_SIZE, style="texture", b_tile=False, rm_bg=False)
+        # Submit all NPCs and locations
+        future_locations = []
+        future_npcs = []
+        for i in range(len(loc_names_list)):
+            loc_name = loc_names_list[i]
+            
+            loc_desc = locs[loc_name]['pixelart_prompt']
+            loc_icon_desc = locs[loc_name]['pixelart_icon']
+            
+            npc_name = locs[loc_name]['npc_name']
+            npc_desc = npcs[npc_name]['npc_art_prompt']
+            
+            write_to_log(f"INFO [frontend.py::get_game_art()] Submitting location {loc_name} and npc {npc_name} tasks")
+            future_npcs.append(executor.submit(task_get_npc, npc_desc))
+            future_locations.append(executor.submit(task_get_loc, loc_desc, loc_icon_desc))
+            
+        # Now, receive everything
+        home_path = future_home.result()
+        player_path = future_player.result()
+        floor_tile_path, wall_tile_path = future_bg_tiles.result()
+        bg_sprite_path = future_bg_sprite.result()
         
-        # Icon should be prompted as a game asset, transparent
-        # Send the location image in the prompt with input image
-        loc_icon_path, _ = get_pixel_art(loc_icon_desc, size=LOC_ICON_SIZE, style="game_asset", b_tile=False, rm_bg=False, input_b64=loc_b64)
+        for i in range(len(loc_names_list)):
+            loc_name = loc_names_list[i]
+            write_to_log(f"INFO [frontend.py::get_game_art()] Waiting on location {loc_name}...")
+            npc_name = locs[loc_name]['npc_name']
+            
+            full_path, icon_path = future_locations[i].result()
+            npc_path = future_npcs[i].result()
+            
+            all_tiles[loc_name] = {}
+            all_paths[loc_name] = {}
+            all_tiles[loc_name]['full'] = pygame.image.load(full_path).convert_alpha()
+            all_tiles[loc_name]['icon'] = pygame.image.load(icon_path).convert_alpha()
+            all_tiles[npc_name]         = pygame.image.load(npc_path).convert_alpha()
+            
+            all_paths[loc_name]['full'] = full_path
+            all_paths[loc_name]['icon'] = icon_path
+            all_paths[npc_name]         = npc_path
+    
+    
+        # Save all other tiles
+        all_tiles['player'] = pygame.image.load(player_path).convert_alpha()
+        all_tiles['home_icon'] = pygame.image.load(home_path).convert_alpha()
+        all_tiles['wall_tile'] = pygame.image.load(wall_tile_path).convert_alpha()
+        all_tiles['floor_tile'] = pygame.image.load(floor_tile_path).convert_alpha()
+        all_tiles['bgnd_sprite'] = pygame.image.load(bg_sprite_path).convert_alpha()
         
-        # Get all three
-        all_tiles[loc_name] = {}
-        all_paths[loc_name] = {}
-        all_tiles[loc_name]['full'] = pygame.image.load(loc_full_path).convert_alpha()
-        all_tiles[loc_name]['icon'] = pygame.image.load(loc_icon_path).convert_alpha()
-        all_tiles[npc_name] = pygame.image.load(npc_path).convert_alpha()
-        
-        all_paths[loc_name]['full_path'] = loc_full_path
-        all_paths[loc_name]['icon_path'] = loc_icon_path
-        all_paths[npc_name] = npc_path
-    
-    # Generate background floor tile
-    write_to_log(f"INFO [frontend.py::get_game_art()] Getting background floor tile")
-    prompt = f"A lightly-detailed tile of a floor with the theme {game_setup['theme']}. The color palette is light."
-    floor_tile_path, floor_b64 = get_pixel_art(prompt, size=(TILE_SIZE, TILE_SIZE), style="simple", b_tile=True, rm_bg=False)
-    
-    # Generate wall tile for world boundary
-    write_to_log(f"INFO [frontend.py::get_game_art()] Getting wall tile")
-    prompt = f"A dark wall tile according to the theme {game_setup['theme']}. This is a world boundary for the game, and should be dense with lots of detail. The color palette is dark."
-    wall_tile_path, _ = get_pixel_art(prompt, size=(TILE_SIZE, TILE_SIZE), style="texture", b_tile=True, rm_bg=False, input_b64=floor_b64)
-    
-    # Generate background sprite
-    write_to_log(f"INFO [frontend.py::get_game_art()] Getting background sprite")
-    prompt = game_setup['special_sprite']
-    bgnd_sprite_path, _ = get_pixel_art(prompt, size=BG_SPRITE_SIZE, style="game_asset", b_tile=False, rm_bg=True)
-    
-    # Generate player sprite
-    write_to_log(f"INFO [frontend.py::get_game_art()] Getting player sprite")
-    prompt = game_setup['player_art_prompt']
-    player_path, _ = get_pixel_art(prompt, size=PLAYER_SIZE, style="portrait", b_tile=False, rm_bg=True)
-    
-    # Get Home icon
-    write_to_log(f"INFO [frontend.py::get_game_art()] Getting home icon")
-    prompt = game_setup['home_icon']
-    home_path, _ = get_pixel_art(prompt, size=LOC_ICON_SIZE, style="game_asset", b_tile=False, rm_bg=True)
-    
-    # Save all tiles
-    all_tiles['player'] = pygame.image.load(player_path).convert_alpha()
-    all_tiles['home_icon'] = pygame.image.load(home_path).convert_alpha()
-    all_tiles['wall_tile'] = pygame.image.load(wall_tile_path).convert_alpha()
-    all_tiles['floor_tile'] = pygame.image.load(floor_tile_path).convert_alpha()
-    all_tiles['bgnd_sprite'] = pygame.image.load(bgnd_sprite_path).convert_alpha()
-    
-    all_paths['player'] = player_path
-    all_paths['home_icon'] = home_path
-    all_paths['wall_tile'] = wall_tile_path
-    all_paths['floor_tile'] = floor_tile_path
-    all_paths['bgnd_sprite'] = bgnd_sprite_path
+        all_paths['player'] = player_path
+        all_paths['home_icon'] = home_path
+        all_paths['wall_tile'] = wall_tile_path
+        all_paths['floor_tile'] = floor_tile_path
+        all_paths['bgnd_sprite'] = bg_sprite_path
     
     return all_tiles, all_paths
 
@@ -378,9 +444,14 @@ def draw_icons():
         screen_x = icon_pos[0] - camera_offset.x
         screen_y = icon_pos[1] - camera_offset.y
 
-        # Check if the icon is within the screen bounds
-        if (0 <= screen_x + BG_SPRITE_SIZE[0] <= base_res[0] and
-            0 <= screen_y + BG_SPRITE_SIZE[1] <= base_res[1]):
+        # Create pygame.Rect for the icon's screen position
+        icon_rect = pygame.Rect(screen_x, screen_y, BG_SPRITE_SIZE[0], BG_SPRITE_SIZE[1])
+
+        # Create pygame.Rect for the screen bounds
+        screen_rect = pygame.Rect(0, 0, base_res[0], base_res[1])
+
+        # Check if the icon's rect is within the screen bounds (collision)
+        if screen_rect.colliderect(icon_rect):
             # Only draw the icon if it's within the screen view
             game_surface.blit(art_assets['bgnd_sprite'], (screen_x, screen_y))
     
@@ -750,24 +821,24 @@ if __name__ == "__main__":
     bigfont = pygame.font.Font(None, 48)
     
     # Initialize everything else
-    # tone = input("Enter the tone of the game (e.g. 'anime', 'fantasy', 'sci-fi'): ")
-    # premise = game.generate_initial_premise(desired_tone=tone)
-    # game_setup, locations, npcs = game.get_game_setup(premise)
-    # t = time.time()
-    # art_assets, art_paths = get_game_art(game_setup, locations, npcs)
-    # print(f"Total time to load game assets: {(time.time() - t) :4.2f} Seconds")
-    # print(json.dumps(art_paths, indent=4))
+    tone = input("Enter the tone of the game (e.g. 'anime', 'fantasy', 'sci-fi'): ")
+    premise = game.generate_initial_premise(desired_tone=tone)
+    game_setup, locations, npcs = game.get_game_setup(premise)
+    t = time.time()
+    art_assets, art_paths = get_game_art(game_setup, locations, npcs)
+    print(f"Total time to load game assets: {(time.time() - t) :4.2f} Seconds")
+    print(json.dumps(art_paths, indent=4))
     
     # Save
-    # with open('resources/game_setup_forrest.pkl', 'wb') as f:
-    #     p = (game_setup, locations, npcs, art_paths, premise)
-    #     pickle.dump(p, f)
+    with open('resources/game_setup_wpi.pkl', 'wb') as f:
+        p = (game_setup, locations, npcs, art_paths, premise)
+        pickle.dump(p, f)
     
     # Load
-    with open('resources/game_setup_forrest.pkl', 'rb') as f:
-        p = pickle.load(f)
-        game_setup, locations, npcs, art_paths, premise = p
-        art_assets = load_assets_from_paths(art_paths)
+    # with open('resources/game_setup_college.pkl', 'rb') as f:
+    #     p = pickle.load(f)
+    #     game_setup, locations, npcs, art_paths, premise = p
+    #     art_assets = load_assets_from_paths(art_paths)
         
     game_state = {
         'round' : 0,
@@ -800,71 +871,3 @@ if __name__ == "__main__":
 
     initialize_icons()
     main_game_loop()        
-
-
-# def process_location_assets(loc_name, loc_desc, loc_icon_desc, npc_name, npc_desc):
-#     try:
-#         npc_path, _ = get_pixel_art(npc_desc, size=NPC_SIZE, style="portrait", b_tile=False, rm_bg=True)
-#         loc_full_path, loc_b64 = get_pixel_art(loc_desc, size=LOC_SIZE, style="texture", b_tile=False, rm_bg=False)
-#         loc_icon_path, _ = get_pixel_art(loc_icon_desc, size=LOC_ICON_SIZE, style="game_asset", b_tile=False, rm_bg=False, input_b64=loc_b64)
-
-#         tiles = {
-#             loc_name: {
-#                 'full': pygame.image.load(loc_full_path).convert_alpha(),
-#                 'icon': pygame.image.load(loc_icon_path).convert_alpha()
-#             },
-#             npc_name: pygame.image.load(npc_path).convert_alpha()
-#         }
-#         paths = {
-#             loc_name: {
-#                 'full_path': loc_full_path,
-#                 'icon_path': loc_icon_path
-#             },
-#             npc_name: npc_path
-#         }
-
-#         return {'tiles': tiles, 'paths': paths}
-#     except Exception as e:
-#         write_to_log(f"ERROR [process_location_assets()] Failed to process {loc_name}: {e}")
-#         return {'tiles': {}, 'paths': {}}
-
-
-# def get_game_art(game_setup:dict, locs:dict, npcs:dict):
-#     all_tiles = {}
-#     all_paths = {}
-
-#     futures = []
-#     with ThreadPoolExecutor(max_workers=10) as executor:
-#         # Submit all location-related tasks
-#         for loc_name in locs:
-#             loc_desc = locs[loc_name]['pixelart_prompt']
-#             loc_icon_desc = locs[loc_name]['pixelart_icon']
-#             npc_name = locs[loc_name]['npc_name']
-#             npc_desc = npcs[npc_name]['npc_art_prompt']
-
-#             write_to_log(f"INFO [frontend.py::get_game_art()] Submitting image tasks for location '{loc_name}'")
-
-#             futures.append(executor.submit(process_location_assets, loc_name, loc_desc, loc_icon_desc, npc_name, npc_desc))
-
-#         # Submit other standalone tasks
-#         theme = game_setup['theme']
-#         futures.append(executor.submit(get_pixel_art, f"A very lightly-detailed background floor tile with the theme {theme}. The color palette is light.", (TILE_SIZE, TILE_SIZE), "texture", True, False))
-#         futures.append(executor.submit(get_pixel_art, f"A Wall tile according to the theme {theme}. This is a world boundary for the game, and should be dense.", (TILE_SIZE, TILE_SIZE), "texture", True, False))
-#         futures.append(executor.submit(get_pixel_art, game_setup['special_sprite'], BG_SPRITE_SIZE, "game_asset", False, True))
-#         futures.append(executor.submit(get_pixel_art, game_setup['player_art_prompt'], PLAYER_SIZE, "portrait", False, True))
-
-#         # Process results
-#         for future in as_completed(futures):
-#             result = future.result()
-#             if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], str):
-#                 # It's a generic image result
-#                 path, label = result
-#                 surface = pygame.image.load(path).convert_alpha()
-#                 all_tiles[label] = surface
-#                 all_paths[label] = path
-#             elif isinstance(result, dict):
-#                 # Location asset dict
-#                 all_tiles.update(result['tiles'])
-#                 all_paths.update(result['paths'])
-
-#     return all_tiles, all_paths

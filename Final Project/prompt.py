@@ -9,7 +9,7 @@ Not every NPC knows who has the passphrase. They might suggest traveling to a di
 
 The player should have to visit between 3-5 locations before unveiling the passphrase. Keep that in mind when running the game.
 To get any information about what the passphrase is or who holds it, the player should have to complete some sort of task. 
-This task can be a question about machine learning, a simple math problem, or an easy riddle.
+This task can be a question about machine learning, a simple math problem, a joke, or a simple riddle. But don't do too many riddles, only 1-2 per game.
 Keep a balance of tasks between those. Do not only stick to one type of task.
 
 ONLY ONE NPC KNOWS THE PASSPHRASE. To retrieve the passphrase, the player must convince the NPC to either give it,
