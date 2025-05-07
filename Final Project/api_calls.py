@@ -1,3 +1,5 @@
+import os
+
 import json
 import base64
 import requests
@@ -120,7 +122,15 @@ def get_pixel_art(prompt:str, size:tuple, style:str, b_tile:bool, rm_bg:bool=Fal
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     filename = f"resources/pixelart_{timestamp}.png"
+    
+    # Make sure there is no such file already
+    if(os.path.exists(filename)):
+        count = 0
+        while(os.path.exists(filename)):
+            filename = f"resources/pixelart_{timestamp}_{count}.png"
+            count += 1
 
+    write_to_log(f"INFO [api_calls.py::get_pixel_art()] Saving image to {filename}")
     image.save(filename)
     
     return filename, j['base64_images'][0]

@@ -20,13 +20,14 @@ from api_calls import prompt_llm
 # GAME_TONES = ["Harry Potter", "1800s england", "epic japanese anime", "wild wild west", "cyberpunk, sci-fi, yet dystopian"]
 GAME_TONES = ["Japanese Anime"]
 
-def generate_initial_premise()->str:
+def generate_initial_premise(desired_tone:str)->str:
 
-    tone = random.choice(GAME_TONES)
+    # tone = random.choice(GAME_TONES)
+    tone = desired_tone
     context = GAME_CONTEXT + f"The tone of the game is {tone}. Make sure to format your responses in a way that is exaggerated to the tone.\n"
     context += "END OF CONTEXT. START OF INSTRUCTIONS. \n\n"
     
-    return context, tone
+    return context
 
 def get_dicts_from_json(json: dict):
     """
@@ -241,7 +242,8 @@ def play_round(master_dict:dict)->dict:
 
 if __name__ =='__main__':
     
-    premise, tone = generate_initial_premise()
+    tone = input("What is the tone of the game you would like to play? ")
+    premise = generate_initial_premise(desired_tone=tone)
     
     # game_setup can be fed back into an LLM to provide context of the current game
     # locations and npcs dicts are meant to be used by the game engine.

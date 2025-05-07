@@ -89,7 +89,8 @@ Summary of format for the json file:
   "environment" : "<a potential base prompt for an image generation model">,
   
   "player_art_prompt": "<A 3-4 sentence description that can be fed to a diffusion model to generate the main character>",
-  "special_sprite" : "<A 2-3 sentence description of another background sprite that can be sprinkled throughout the map>"
+  "special_sprite" : "<A 2-3 sentence description of another background sprite that can be sprinkled throughout the map>",
+  "home_icon": "<A 2-3 sentence description of a house that fits the theme to send to a diffusion model>"
 }
 """
 
