@@ -255,8 +255,117 @@ def load_assets_from_paths(art_paths:dict):
     
     return art_assets
     
+def handle_events():
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            return False
+
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_ESCAPE] or keys[pygame.K_q]:
+        pygame.quit()
+        sys.exit()
+    return True
 
 
+def handle_movement():
+    global player_world_pos
+    keys = pygame.key.get_pressed()
+    move = pygame.Vector2(0, 0)
+    if keys[pygame.K_w]: move.y -= player_speed
+    if keys[pygame.K_s]: move.y += player_speed
+    if keys[pygame.K_a]: move.x -= player_speed
+    if keys[pygame.K_d]: move.x += player_speed
+    player_world_pos += move
+
+def clamp_player_to_world():
+    player_world_pos.x = max(0, min(player_world_pos.x, WORLD_SIZE_PIX[0] - PLAYER_SIZE[0]))
+    player_world_pos.y = max(0, min(player_world_pos.y, WORLD_SIZE_PIX[1] - PLAYER_SIZE[1]))
+
+def scroll_camera_to_player():
+    global camera_offset
+    player_screen_x = player_world_pos.x - camera_offset.x
+    player_screen_y = player_world_pos.y - camera_offset.y
+
+    if player_screen_x < scroll_margin.left:
+        camera_offset.x -= scroll_margin.left - player_screen_x
+    elif player_screen_x > scroll_margin.right:
+        camera_offset.x += player_screen_x - scroll_margin.right
+
+    if player_screen_y < scroll_margin.top:
+        camera_offset.y -= scroll_margin.top - player_screen_y
+    elif player_screen_y > scroll_margin.bottom:
+        camera_offset.y += player_screen_y - scroll_margin.bottom
+
+def draw_background():
+    rows = math.ceil(base_res[1] / TILE_SIZE) + 2
+    cols = math.ceil(base_res[0] / TILE_SIZE) + 2
+    start_x = int(camera_offset.x // TILE_SIZE)
+    start_y = int(camera_offset.y // TILE_SIZE)
+
+    for row in range(start_y, start_y + rows):
+        for col in range(start_x, start_x + cols):
+            world_x = col * TILE_SIZE
+            world_y = row * TILE_SIZE
+            screen_x = world_x - camera_offset.x
+            screen_y = world_y - camera_offset.y
+
+            if 0 <= col < WORLD_SIZE_TILES[0] and 0 <= row < WORLD_SIZE_TILES[1]:
+                tile = art_assets['floor_tile']
+            else:
+                tile = art_assets['wall_tile']
+            game_surface.blit(tile, (screen_x, screen_y))
+
+def draw_player():
+    player_rect = pygame.Rect(
+        player_world_pos.x - camera_offset.x,
+        player_world_pos.y - camera_offset.y,
+        PLAYER_SIZE[0], PLAYER_SIZE[1]
+    )
+    game_surface.blit(art_assets['player'], player_rect)
+
+def draw_minimap():
+    minimap_surface = pygame.Surface((MINIMAP_WIDTH, MINIMAP_HEIGHT), pygame.SRCALPHA)
+    minimap_surface.fill((40, 40, 40, 180))  # Transparent dark gray
+    game_surface.blit(minimap_surface, MINIMAP_POS)
+
+    scale_x = MINIMAP_WIDTH / WORLD_SIZE_PIX[0]
+    scale_y = MINIMAP_HEIGHT / WORLD_SIZE_PIX[1]
+
+    # Draw player as red dot
+    player_x = int(MINIMAP_POS[0] + player_world_pos.x * scale_x)
+    player_y = int(MINIMAP_POS[1] + player_world_pos.y * scale_y)
+    pygame.draw.circle(game_surface, (255, 0, 0), (player_x, player_y), 2)
+
+    # Draw camera view as white rectangle
+    camera_rect = pygame.Rect(
+        MINIMAP_POS[0] + camera_offset.x * scale_x,
+        MINIMAP_POS[1] + camera_offset.y * scale_y,
+        base_res[0] * scale_x,
+        base_res[1] * scale_y
+    )
+    pygame.draw.rect(game_surface, (255, 255, 255), camera_rect, 1)
+
+def render_frame():
+    scaled_surface = pygame.transform.scale(game_surface, window_size)
+    screen.blit(scaled_surface, (0, 0))
+    pygame.display.flip()
+
+
+def main_game_loop():
+    running = True
+    while running:
+        dt = clock.tick(60)
+
+        running = handle_events()
+        handle_movement()
+        clamp_player_to_world()
+        scroll_camera_to_player()
+
+        draw_background()
+        draw_player()
+        draw_minimap()
+        render_frame()
+    
 
 if __name__ == "__main__":
     
@@ -299,109 +408,7 @@ if __name__ == "__main__":
         base_res[1] * 0.4 - PLAYER_SIZE[1] # height
     )
 
-    running = True
-    while running:
-        dt = clock.tick(60)
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-        # --- Movement ---
-        keys = pygame.key.get_pressed()
-        if(keys[pygame.K_ESCAPE] or keys[pygame.K_q]):
-            pygame.quit()
-            sys.exit()
-        move = pygame.Vector2(0, 0)
-        if keys[pygame.K_w]: move.y -= player_speed
-        if keys[pygame.K_s]: move.y += player_speed
-        if keys[pygame.K_a]: move.x -= player_speed
-        if keys[pygame.K_d]: move.x += player_speed
-        player_world_pos += move
-        
-        # Clamp player to the world
-        player_world_pos.x = max(0, min(player_world_pos.x, WORLD_SIZE_PIX[0] - PLAYER_SIZE[0]))
-        player_world_pos.y = max(0, min(player_world_pos.y, WORLD_SIZE_PIX[1] - PLAYER_SIZE[1]))
-
-        # --- Determine screen position of player ---
-        player_screen_x = player_world_pos.x - camera_offset.x
-        player_screen_y = player_world_pos.y - camera_offset.y
-
-        # --- Scroll the camera if player leaves scroll margin ---
-        if player_screen_x < scroll_margin.left:
-            camera_offset.x -= scroll_margin.left - player_screen_x
-        elif player_screen_x > scroll_margin.right:
-            camera_offset.x += player_screen_x - scroll_margin.right
-
-        if player_screen_y < scroll_margin.top:
-            camera_offset.y -= scroll_margin.top - player_screen_y
-        elif player_screen_y > scroll_margin.bottom:
-            camera_offset.y += player_screen_y - scroll_margin.bottom
-
-        # --- Draw ---
-        game_area_rect = game_surface.get_rect()  # Get screen bounds
-
-        rows = math.ceil(base_res[1] / TILE_SIZE) + 2
-        cols = math.ceil(base_res[0] / TILE_SIZE) + 2
-        start_x = int(camera_offset.x // TILE_SIZE)
-        start_y = int(camera_offset.y // TILE_SIZE)
-
-        # Draw background tiles
-        for row in range(start_y, start_y + rows):
-            for col in range(start_x, start_x + cols):
-                world_x = col * TILE_SIZE
-                world_y = row * TILE_SIZE
-                screen_x = world_x - camera_offset.x
-                screen_y = world_y - camera_offset.y
-
-                rect = pygame.Rect(screen_x, screen_y, TILE_SIZE, TILE_SIZE)
-                
-                if((0 <= col < WORLD_SIZE_TILES[0]) and (0 <= row < WORLD_SIZE_TILES[1])):
-                    game_surface.blit(art_assets['floor_tile'], (screen_x, screen_y))
-                else:
-                    game_surface.blit(art_assets['wall_tile'], (screen_x, screen_y))
-                    
-                
-                # Debug: draw tile borders
-                # pygame.draw.rect(game_surface, (0, 0, 0), rect, 1)  # tile border
-                
-        # The world is 3x2.
-
-        # Draw player (at screen position)
-        player_rect = pygame.Rect(
-            player_world_pos.x - camera_offset.x,
-            player_world_pos.y - camera_offset.y,
-            PLAYER_SIZE[0], PLAYER_SIZE[1]
-        )
-        game_surface.blit(art_assets['player'], player_rect)
-        
-        # Draw minimap
-        minimap_rect = pygame.Rect(MINIMAP_POS[0], MINIMAP_POS[1], MINIMAP_WIDTH, MINIMAP_HEIGHT)
-        pygame.draw.rect(game_surface, (100, 100, 100, 100), minimap_rect)  # Dark grey background
-        scale_x = MINIMAP_WIDTH / WORLD_SIZE_PIX[0]
-        scale_y = MINIMAP_HEIGHT / WORLD_SIZE_PIX[1]
-
-        minimap_player_x = int(MINIMAP_POS[0] + player_world_pos.x * scale_x)
-        minimap_player_y = int(MINIMAP_POS[1] + player_world_pos.y * scale_y)
-
-        pygame.draw.circle(game_surface, (255, 0, 0), (minimap_player_x, minimap_player_y), 2)  # Red dot for player
-
-        camera_rect = pygame.Rect(
-            MINIMAP_POS[0] + camera_offset.x * scale_x,
-            MINIMAP_POS[1] + camera_offset.y * scale_y,
-            base_res[0] * scale_x,
-            base_res[1] * scale_y
-        )
-        pygame.draw.rect(game_surface, (255, 255, 255), camera_rect, 1)  # White outline  
-
-        # Draw scroll margin box for debugging
-        # pygame.draw.rect(game_surface, (255, 255, 255), scroll_margin, 2)
-
-        # Transform the surface to the screen
-        scaled_surface = pygame.transform.scale(game_surface, window_size)
-        screen.blit(scaled_surface, (0, 0))
-        
-        pygame.display.flip()
+    main_game_loop()        
 
     pygame.quit()
     sys.exit()
