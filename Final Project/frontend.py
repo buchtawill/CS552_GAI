@@ -168,7 +168,7 @@ def get_game_art(game_setup:dict, locs:dict, npcs:dict):
     1 player sprite, PLAYER_SIZE[0] x PLAYER_SIZE[1]
     1 home sprite
     
-    29 total credits / ~35 cents per function call :(
+    29 total credits / ~36.25 cents per function call :(
         
     Args:
         game_setup(dict): The game setup dict created by chat GPT
@@ -762,7 +762,8 @@ def main_game_loop():
                 prompt = master_dict['llm_premise'] + instruction_base + instruction
                 
                 npc_response = prompt_llm(prompt)
-                master_dict['history'].append(npc_response)
+                hist = f"THE NPC {npc_name} RESPONDED: '{npc_response}'. END OF NPC RESPONSE"
+                master_dict['history'].append(hist)
                 write_to_log(f"INFO [frontend.py::main_game_loop()] NPC response: {npc_response}")
                 interaction_state = S_NPC_TALK
             
@@ -782,6 +783,7 @@ def main_game_loop():
                         master_dict['state']['round'] += 1
                         render_state = S_MAIN_WORLD
                     else:
+                        hist = f"THE PLAYER RESPONDED '{master_dict['player_response']}'. END OF PLAYER RESPONSE"
                         master_dict['history'].append(master_dict['player_response'])
                     master_dict['player_response'] = ""
                     interaction_state = S_NPC_PROMPT_LLM
@@ -815,8 +817,8 @@ if __name__ == "__main__":
     NEW_GAME = 0
     LOAD_SAVED = 1
     
-    # game_mode = LOAD_SAVED
-    game_mode = NEW_GAME
+    game_mode = LOAD_SAVED
+    # game_mode = NEW_GAME
     
     # Initialize pygame
     pygame.init()
@@ -844,8 +846,9 @@ if __name__ == "__main__":
     
     # Load a saved game
     elif game_mode == LOAD_SAVED:
-        # with open('resources/game_setup_wpi.pkl', 'rb') as f:
-        with open('resources/game_setup_epic_anime.pkl', 'rb') as f:
+        with open('resources/game_setup_wpi.pkl', 'rb') as f:
+        # with open('resources/game_setup_epic_anime.pkl', 'rb') as f:
+        # with open('resources/game_setup_futurama.pkl', 'rb') as f:
             p = pickle.load(f)
             game_setup, locations, npcs, art_paths, premise = p
             art_assets = load_assets_from_paths(art_paths)

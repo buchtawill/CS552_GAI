@@ -10,7 +10,6 @@ if os.path.exists(log.LOG_NAME):
 import requests
 from PIL import Image
 from io import BytesIO
-import matplotlib.pyplot as plt
 
 from prompt import * # A set of predefined prompts
 from api_key import OPENAI_API_KEY as KEY
